@@ -1,0 +1,55 @@
+
+All of the following endpoints should have authentication token included in headers.
+
+POST /image
+Appends Image table
+JSON:
+{image}
+OUTPUT:
+{features_view_url}
+Error codes:
+- wrong data input (wrong format, too big image etc.)
+- unauthorized
+
+GET /images?page=x
+Gets list of images for the requesting user using pagination.
+JSON:
+{user}
+OUTPUT:
+{
+    "images" : [],
+    "page": x,
+    "pages": 50
+}
+Error codes:
+- forbidden (if no permissions)
+- unauthorized
+
+GET /links
+Gets links and abilities boolean for the frontend
+JSON:
+{user.tier}
+OUTPUT:
+{thumbnail_links: link1, link2...,image_link, expiration_link_bool}
+Error codes:
+- image post failed(?)
+- unauthorized(?)
+
+POST /expiration link
+Posts number of seconds typed by user to create expiration link
+JSON:
+{number_of_seconds}
+Error codes:
+- wrong format(must be int)
+- wrong value(must be between 300-30000)
+- unauthorized
+
+GET /expiration link
+Gets expiration link for the user
+JSON:
+{number_of_seconds, image}
+OUTPUT:
+{expiration_link}
+Error codes:
+- expiration link post failed(?)
+- unauthorized (?)
