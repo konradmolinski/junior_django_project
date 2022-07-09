@@ -5,6 +5,7 @@ from django.dispatch import receiver
 from django.conf import settings
 from rest_framework.authtoken.models import Token
 
+
 class Tier(models.Model):
     original_file_link = models.BooleanField()
     expiring_links = models.BooleanField()
