@@ -6,6 +6,9 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image as im
 from io import BytesIO
+from .serializers import ImageSerializer
+from rest_framework.pagination import PageNumberPagination
+# from rest_framework.pagination import
 
 
 class PostImageAPIView(viewsets.ViewSet):
@@ -58,3 +61,18 @@ class PostImageAPIView(viewsets.ViewSet):
 
         else:
             return Response({'thumbnails': thumbnail_list, 'expiring_link': account.tier.expiring_links})
+
+
+class GetUsersImagesAPIView(viewsets.ViewSet):
+
+    def retrieve(self, request, pk=None):
+
+        account = request.user.account
+        paginator = PageNumberPagination()
+        queryset = Image.objects.filter(account=account).order_by('id')
+        context = paginator.paginate_queryset(queryset, request)
+        serializer = ImageSerializer(context, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
+
