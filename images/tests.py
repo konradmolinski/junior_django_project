@@ -103,14 +103,14 @@ class GetListOfImagesTestCase(TestCase):
 
         self.token = response.json()['token']
 
-        for i in range(5):
+        for i in range(10):
             create_and_post_image('JPEG', 'image/jpeg', self.token)
 
     def test_getting_users_images(self):
 
         response = client.get('/api/get-users-images', HTTP_AUTHORIZATION='Token ' + self.token)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['list_of_images']), 5)
+        self.assertEqual(len(response.json()['results']), settings.REST_FRAMEWORK['PAGE_SIZE'])
 
 
 def tearDownModule():
