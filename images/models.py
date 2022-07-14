@@ -2,17 +2,22 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.conf import settings
 from rest_framework.authtoken.models import Token
 
+
+def default_thumbnail_sizes_list():
+    return [200]
+
+
 class Tier(models.Model):
+    thumbnail_sizes = models.JSONField(default=default_thumbnail_sizes_list)
     original_file_link = models.BooleanField()
     expiring_links = models.BooleanField()
 
 
 class Account(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    tier = models.ForeignKey(Tier, null=True, on_delete=models.PROTECT)
+    tier = models.ForeignKey(Tier, default=1, on_delete=models.PROTECT)
 
 
 class Image(models.Model):
@@ -21,8 +26,8 @@ class Image(models.Model):
 
 
 class Thumbnail(models.Model):
-    height = models.IntegerField()
-    tier = models.ForeignKey(Tier, on_delete=models.CASCADE)
+    image = models.ForeignKey(Image, on_delete=models.CASCADE)
+    thumbnail = models.ImageField(upload_to='thumbnails/', null=True)
 
 
 @receiver(post_save, sender=User)
