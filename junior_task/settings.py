@@ -65,7 +65,7 @@ ROOT_URLCONF = 'junior_task.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR/'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -118,6 +118,15 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
+
+VALID_IMAGE_MIMETYPES = [
+    'image/jpeg',
+    'image/png'
+]
+
+MAXIMUM_IMAGE_SIZE = 1024 * 1024 * 25
+
+HOSTNAME = 'http://localhost:8000'
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/

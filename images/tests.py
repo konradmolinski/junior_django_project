@@ -1,55 +1,110 @@
-import base64
-import tempfile
-from PIL import Image
-from rest_framework.test import RequestsClient
-from django.conf import settings
-from django.test import TestCase
+import shutil
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User
+from django.test import TestCase
+from django.test import Client
+from django.test import override_settings
+from django.conf import settings
+from .models import Image, Account, Tier, Thumbnail
 from rest_framework.authtoken.models import Token
+from PIL import Image as im
+from io import BytesIO
 
-
-client = RequestsClient()
+TEST_DIR = 'test_data'
+client = Client()
 
 
 def create_user_account(username, password):
     user = User(username=username)
-    user.save()
     user.set_password(password)
     user.save()
     return user
 
 
-def temporary_image():
-    image = Image.new('RGB', (100, 100))
-    tmp_file = tempfile.NamedTemporaryFile(suffix='.jpg', prefix='test_img_')
-    image.save(tmp_file, 'jpeg')
-    tmp_file.seek(0)
-    return tmp_file
-
-
 class PostImageTestCase(TestCase):
+    fixtures = ['tier_fixtures.json']
 
     def setUp(self):
 
         self.user = create_user_account(username='user1', password='123')
         self.user_password = '123'
 
-        self.assertEqual(Token.objects.all().exists(), True)
-        response = client.post("http://localhost:8000/api/token-auth", data={"username": self.user.username,
-                                                                             "password": self.user_password} )
+        self.assertTrue(Account.objects.all().exists())
+        self.assertTrue(Token.objects.all().exists())
 
+        self.user.account.tier = Tier.objects.filter(pk=1).get()
+        self.user.account.save()
+        self.assertEqual(len(self.user.account.tier.thumbnail_sizes), 1)
+
+        response = client.post('/api/token-auth', {"username": self.user.username, "password": self.user_password})
+
+        self.assertTrue(response.json()['token'])
         self.token = response.json()['token']
-        self.assertIsNotNone(response)
 
-    def test_jpeg_image_posting(self):
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/'media'/TEST_DIR))
+    def test_valid_jpg_post(self):
 
-        # img_path = settings.BASE_DIR/'media/test_images/Kitten-Blog.jpeg/'
-        # with open(img_path, 'rb') as f:
-        #     image = base64.b64encode(f.read()).decode('utf-8')
+        im_obj = im.new(mode="RGB", size=(200, 200))
+        buffer = BytesIO()
+        im_obj.save(fp=buffer, format='JPEG')
 
-        response = client.post(url='http://localhost:8000/api/post-image', data={'image': temporary_image()},
-                               headers={'Authorization': 'Token ' + self.token, 'Content-Type': 'multipart/form-data'})
+        img_file = SimpleUploadedFile("test_img.jpg", buffer.getvalue(), content_type='image/jpg')
 
+        response = client.post('/api/post-image', {'image': img_file}, HTTP_AUTHORIZATION='Token ' + self.token)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Image.objects.all().exists(), True)
+        self.assertTrue(Image.objects.all().exists())
+        self.assertTrue(Thumbnail.objects.filter(thumbnail__isnull=False).exists())
 
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/'media'/TEST_DIR))
+    def test_valid_png_post(self):
+
+        im_obj = im.new(mode="RGB", size=(200, 200))
+        buffer = BytesIO()
+        im_obj.save(fp=buffer, format='PNG')
+
+        img_file = SimpleUploadedFile("test_image.png", buffer.getvalue(), content_type='image/png')
+
+        response = client.post('/api/post-image', {'image': img_file}, HTTP_AUTHORIZATION='Token ' + self.token)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Image.objects.all().exists())
+        self.assertTrue(Thumbnail.objects.filter(thumbnail__isnull=False).exists())
+
+        print(response.json())
+
+    @override_settings(MAXIMUM_IMAGE_SIZE=100)
+    def test_image_size_in_bytes_validation(self):
+
+        im_obj = im.new(mode="RGB", size=(200, 200))
+        buffer = BytesIO()
+        im_obj.save(fp=buffer, format='JPEG')
+
+        img_file = SimpleUploadedFile("test_img.jpg", buffer.getvalue(), content_type='image/jpg')
+
+        response = client.post('/api/post-image', {'image': img_file}, HTTP_AUTHORIZATION='Token ' + self.token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_msg'], "File size is too big.")
+
+    def test_invalid_image_format_post(self):
+
+        im_obj = im.new(mode="RGB", size=(200, 200))
+        buffer = BytesIO()
+        im_obj.save(fp=buffer, format='GIF')
+
+        img_file = SimpleUploadedFile("test_image.gif", buffer.getvalue(), content_type='image/gif')
+
+        response = client.post('/api/post-image', {'image': img_file}, HTTP_AUTHORIZATION='Token ' + self.token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_msg'], "Wrong file format.")
+
+    def test_post_without_file(self):
+
+        response = client.post('/api/post-image', HTTP_AUTHORIZATION='Token ' + self.token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_msg'], "No image in request.FIlES.")
+
+
+def tearDownModule():
+    try:
+        shutil.rmtree('media/'+TEST_DIR)
+    except OSError:
+        pass

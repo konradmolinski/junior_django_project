@@ -1,0 +1,37 @@
+[
+{
+    "model": "images.tier",
+    "pk": 1,
+    "fields": {
+        "thumbnail_sizes": [
+            200
+        ],
+        "original_file_link": false,
+        "expiring_links": false
+    }
+},
+{
+    "model": "images.tier",
+    "pk": 2,
+    "fields": {
+        "thumbnail_sizes": [
+            200,
+            400
+        ],
+        "original_file_link": true,
+        "expiring_links": false
+    }
+},
+{
+    "model": "images.tier",
+    "pk": 3,
+    "fields": {
+        "thumbnail_sizes": [
+            200,
+            400
+        ],
+        "original_file_link": true,
+        "expiring_links": true
+    }
+}
+]
