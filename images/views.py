@@ -58,3 +58,17 @@ class PostImageAPIView(viewsets.ViewSet):
 
         else:
             return Response({'thumbnails': thumbnail_list, 'expiring_link': account.tier.expiring_links})
+
+
+class GetUsersImagesAPIView(viewsets.ViewSet):
+
+    def retrieve(self, request, pk=None):
+
+        account = request.user.account
+        list_of_images = []
+        for image in Image.objects.filter(account=account):
+            list_of_images.append(settings.HOSTNAME + image.image.url)
+
+        return Response({'list_of_images': list_of_images})
+
+
