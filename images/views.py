@@ -1,14 +1,15 @@
-from rest_framework import viewsets
-from rest_framework.response import Response
-from images.models import Image, Thumbnail
+import pytz
+import datetime
 import magic
+from io import BytesIO
+from PIL import Image as pil_img
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
-from PIL import Image as im
-from io import BytesIO
-from .serializers import ImageSerializer
+from rest_framework import viewsets
+from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-# from rest_framework.pagination import
+from images.models import Image, Thumbnail, BinaryImage
+from .serializers import ImageSerializer
 
 
 class PostImageAPIView(viewsets.ViewSet):
@@ -19,48 +20,50 @@ class PostImageAPIView(viewsets.ViewSet):
             return Response({"error_msg": "No image in request.FIlES."}, status=400)
 
         data_key = list(request.FILES.keys())[0]
-        image = request.FILES[data_key]
+        uploaded_image = request.FILES[data_key]
 
-        if image.size > settings.MAXIMUM_IMAGE_SIZE:
+        if uploaded_image.size > settings.MAXIMUM_IMAGE_SIZE:
             return Response({"error_msg": "File size is too big."}, status=400)
 
         mime = magic.Magic(mime=True)
-        mimetype = mime.from_buffer(image.file.read(2048))
-        image.file.seek(0)
+        mimetype = mime.from_buffer(uploaded_image.file.read(2048))
+        uploaded_image.file.seek(0)
 
         if mimetype not in settings.VALID_IMAGE_MIMETYPES:
             return Response({"error_msg": "Wrong file format."}, status=400)
 
         account = request.user.account
-        img = Image(image=image, account=account)
-        img.save()
+        image = Image(image=uploaded_image, account=account)
+        image.save()
 
         thumbnail_list = []
         for thumbnail_height in account.tier.thumbnail_sizes:
 
-            im_obj = im.open(image)
-            width, height = im_obj.size
+            pil_image = pil_img.open(uploaded_image)
+            width, height = pil_image.size
 
             thumbnail_width = int(width/(height/thumbnail_height))
-            im_obj.thumbnail((thumbnail_width, thumbnail_height))
+            pil_image.thumbnail((thumbnail_width, thumbnail_height))
             buffer = BytesIO()
-            im_obj.save(fp=buffer, format=mimetype[6:])
+            pil_image.save(fp=buffer, format=uploaded_image.name.split('.')[1])
 
-            img_file = SimpleUploadedFile(f"{thumbnail_width}x{thumbnail_height}_thumbnail_{request.FILES[data_key].name}",
-                                          buffer.getvalue(), content_type=mimetype)
+            thumbnail_image = SimpleUploadedFile(f"{thumbnail_width}x{thumbnail_height}_thumbnail_{uploaded_image.name}",
+                                                 buffer.getvalue(), content_type=mimetype)
 
-            thumbnail = Thumbnail(image=img, thumbnail=img_file)
+            thumbnail = Thumbnail(original_image=image, thumbnail=thumbnail_image)
             thumbnail.save()
             thumbnail_list.append(settings.HOSTNAME + thumbnail.thumbnail.url)
 
-        if account.tier.original_file_link:
+        original_image_pk = image.pk
+        if account.tier.original_image_link_bool:
 
-            original_image_url = settings.HOSTNAME + img.image.url
+            original_image_url = settings.HOSTNAME + image.image.url
             return Response({'thumbnails': thumbnail_list, 'original_image_url': original_image_url,
-                             'expiring_link': account.tier.expiring_links})
+                             'expiring_link': account.tier.expiring_link_bool, 'original_image_pk': original_image_pk})
 
         else:
-            return Response({'thumbnails': thumbnail_list, 'expiring_link': account.tier.expiring_links})
+            return Response({'thumbnails': thumbnail_list, 'expiring_link': account.tier.expiring_link_bool,
+                             'original_image_pk': original_image_pk})
 
 
 class GetUsersImagesAPIView(viewsets.ViewSet):
@@ -76,3 +79,42 @@ class GetUsersImagesAPIView(viewsets.ViewSet):
         return paginator.get_paginated_response(serializer.data)
 
 
+class ExpirationLinkAPIView(viewsets.ViewSet):
+
+    def retrieve(self, request, pk=None):
+
+        original_image_pk = request.data['original_image_pk']
+        original_image = Image.objects.filter(pk=original_image_pk).get()
+
+        if BinaryImage.objects.filter(original_image=original_image).exists():
+            return Response({"error_msg": "Expiration link already fetched."}, status=400)
+
+        expiration_time = int(request.data['expiration_time'])
+        if not 300 <= expiration_time <= 30000:
+            return Response({"error_msg": "Wrong expiration time value."}, status=400)
+
+        try:
+            pil_image = pil_img.open(f'{settings.BASE_DIR}{original_image.image.url}')
+        except:
+            pil_image = pil_img.open(f'{settings.BASE_DIR}/test_data{original_image.image.url}')
+
+        pil_image = pil_image.convert('L')
+        threshold = 100
+        pil_image = pil_image.point(lambda p: 255 if p > threshold else 0)
+        pil_image = pil_image.convert('1')
+
+        buffer = BytesIO()
+        pil_image.save(fp=buffer, format='png')
+
+        binary_image_file = SimpleUploadedFile(f"binary_{original_image.image.name.split('.')[0]}.png",
+                                      buffer.getvalue(), content_type='image/png')
+
+        timezone = pytz.timezone(settings.TIME_ZONE)
+        expiration_date = timezone.localize(datetime.datetime.now() + datetime.timedelta(seconds=expiration_time))
+
+        binary_image = BinaryImage(binary_image=binary_image_file, expiration_date=expiration_date,
+                                   original_image=original_image)
+        binary_image.save()
+        expiring_link = settings.HOSTNAME + binary_image.binary_image.url
+
+        return Response({'expiring_link': expiring_link})

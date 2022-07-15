@@ -6,8 +6,8 @@
         "thumbnail_sizes": [
             200
         ],
-        "original_file_link": false,
-        "expiring_links": false
+        "original_image_link_bool": false,
+        "expiring_link_bool": false
     }
 },
 {
@@ -18,8 +18,8 @@
             200,
             400
         ],
-        "original_file_link": true,
-        "expiring_links": false
+        "original_image_link_bool": true,
+        "expiring_link_bool": false
     }
 },
 {
@@ -30,8 +30,8 @@
             200,
             400
         ],
-        "original_file_link": true,
-        "expiring_links": true
+        "original_image_link_bool": true,
+        "expiring_link_bool": true
     }
 }
 ]
