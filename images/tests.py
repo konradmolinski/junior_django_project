@@ -1,14 +1,16 @@
 import shutil
+from PIL import Image as pil_img
+from io import BytesIO
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test import Client
 from django.test import override_settings
 from django.conf import settings
-from .models import Image, Account, Tier, Thumbnail
 from rest_framework.authtoken.models import Token
-from PIL import Image as im
-from io import BytesIO
+from .models import Image, Account, Tier, Thumbnail, BinaryImage
+
+
 
 TEST_DIR = 'test_data'
 client = Client()
@@ -22,11 +24,11 @@ def create_user_account(username, password):
 
 
 def create_and_post_image(extension, content_type, token):
-    im_obj = im.new(mode="RGB", size=(200, 200))
+    im_obj = pil_img.new(mode="RGB", size=(200, 200))
     buffer = BytesIO()
     im_obj.save(fp=buffer, format=extension)
 
-    img_file = SimpleUploadedFile("test_img", buffer.getvalue(), content_type=content_type)
+    img_file = SimpleUploadedFile("test_img." + extension.lower(), buffer.getvalue(), content_type=content_type)
     response = client.post('/api/post-image', {'image': img_file}, HTTP_AUTHORIZATION='Token ' + token)
     return response
 
@@ -51,7 +53,7 @@ class PostImageTestCase(TestCase):
         self.assertTrue(response.json()['token'])
         self.token = response.json()['token']
 
-    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/'media'/TEST_DIR))
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/TEST_DIR/'media'))
     def test_valid_jpg_post(self):
 
         response = create_and_post_image('JPEG', 'image/jpeg', self.token)
@@ -59,7 +61,7 @@ class PostImageTestCase(TestCase):
         self.assertTrue(Image.objects.all().exists())
         self.assertTrue(Thumbnail.objects.filter(thumbnail__isnull=False).exists())
 
-    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/'media'/TEST_DIR))
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/TEST_DIR/'media'))
     def test_valid_png_post(self):
 
         response = create_and_post_image('PNG', 'image/png', self.token)
@@ -90,7 +92,7 @@ class PostImageTestCase(TestCase):
 class GetListOfImagesTestCase(TestCase):
     fixtures = ['tier_fixtures.json']
 
-    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/'media'/TEST_DIR))
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/TEST_DIR/'media'))
     def setUp(self):
 
         self.user = create_user_account(username='user1', password='123')
@@ -113,8 +115,49 @@ class GetListOfImagesTestCase(TestCase):
         self.assertEqual(len(response.json()['results']), settings.REST_FRAMEWORK['PAGE_SIZE'])
 
 
+class ExpirationLinkTestCase(TestCase):
+    fixtures = ['tier_fixtures.json']
+
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR/TEST_DIR/'media'))
+    def setUp(self):
+
+        self.user = create_user_account(username='user1', password='123')
+        self.user_password = '123'
+
+        self.user.account.tier = Tier.objects.filter(pk=3).get()
+        self.user.account.save()
+
+        response = client.post('/api/token-auth', {"username": self.user.username, "password": self.user_password})
+        self.token = response.json()['token']
+
+        response = create_and_post_image('JPEG', 'image/jpeg', self.token)
+        self.original_image_pk = response.json()['original_image_pk']
+
+    def test_invalid_expiration_time_value(self):
+
+        response = client.post('/api/expiration-link', {'original_image_pk': self.original_image_pk,
+                                                        'expiration_time': 200}, HTTP_AUTHORIZATION='Token ' + self.token)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_msg'], "Wrong expiration time value.")
+
+    @override_settings(MEDIA_ROOT=(settings.BASE_DIR / TEST_DIR / 'media'))
+    def test_getting_expiration_link(self):
+
+        response = client.post('/api/expiration-link', {'original_image_pk': self.original_image_pk,
+                                                        'expiration_time': 300}, HTTP_AUTHORIZATION='Token ' + self.token)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(BinaryImage.objects.all().exists())
+
+        response = client.post('/api/expiration-link', {'original_image_pk': self.original_image_pk,
+                                                        'expiration_time': 300}, HTTP_AUTHORIZATION='Token ' + self.token)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_msg'], "Expiration link already fetched.")
+
 def tearDownModule():
     try:
-        shutil.rmtree('media/'+TEST_DIR)
+        shutil.rmtree(TEST_DIR + '/media')
     except OSError:
         pass

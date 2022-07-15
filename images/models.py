@@ -11,8 +11,8 @@ def default_thumbnail_sizes_list():
 
 class Tier(models.Model):
     thumbnail_sizes = models.JSONField(default=default_thumbnail_sizes_list)
-    original_file_link = models.BooleanField()
-    expiring_links = models.BooleanField()
+    original_image_link_bool = models.BooleanField()
+    expiring_link_bool = models.BooleanField()
 
 
 class Account(models.Model):
@@ -26,8 +26,14 @@ class Image(models.Model):
 
 
 class Thumbnail(models.Model):
-    image = models.ForeignKey(Image, on_delete=models.CASCADE)
+    original_image = models.ForeignKey(Image, on_delete=models.CASCADE)
     thumbnail = models.ImageField(upload_to='thumbnails/', null=True)
+
+
+class BinaryImage(models.Model):
+    original_image = models.ForeignKey(Image, on_delete=models.CASCADE)
+    binary_image = models.ImageField(upload_to='binary_images/')
+    expiration_date = models.DateTimeField()
 
 
 @receiver(post_save, sender=User)

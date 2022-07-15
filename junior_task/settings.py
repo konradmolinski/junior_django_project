@@ -117,12 +117,12 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    'PAGE_SIZE': 5
+    'PAGE_SIZE': 2
 }
 
 VALID_IMAGE_MIMETYPES = [
     'image/jpeg',
-    'image/png'
+    'image/png',
 ]
 
 MAXIMUM_IMAGE_SIZE = 1024 * 1024 * 25
